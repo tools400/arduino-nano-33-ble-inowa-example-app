@@ -1,8 +1,8 @@
 # Arduino Nano 33 BLE - iNoWa Beispiel
 
-Beispiel zum Senden von Daten von einer Android App an eine Arduino Anwednung, die auf einem Arduino Nano 33 BLE läuft.
+Beispiel zum Senden von Daten von einer Android App an eine Arduino Anwendung, die auf einem Arduino Nano 33 BLE läuft.
 
-Die Android App wurde mit Hilfe des [MIT App Inventors](https://appinventor.mit.edu/) gebaut.
+Die Android App wurde mit Hilfe des [MIT App Inventor](https://appinventor.mit.edu/) gebaut.
 
 Für den Betrieb der WS2811 LED Kette in Verbindung mit dem Arduino Nano 33 BLE ist ein Pegelkonverter am Dateneingang erforderlich. Zum Beispiel der [4-channel I2C-safe Bi-directional Logic Level Converter - BSS138](https://www.adafruit.com/product/757) von Adafruit.
 
@@ -75,7 +75,7 @@ Diese Funktion sendet einen Bytefolge mit einer Länge kleiner/gleich der einges
 
 ## Siehe auch
 
-* [MIT App Inventors](https://appinventor.mit.edu/)
+* [MIT App Inventor](https://appinventor.mit.edu/)
 * [MIT App Inventor - Bluetooth Low Energy Extension](https://github.com/mit-cml/appinventor-extensions/tree/extension/bluetoothle)
 * [Download Bluetooth Low Energy Extension](https://mit-cml.github.io/extensions/data/extensions/edu.mit.appinventor.ble-20240822.aix)
 * [MIT App Inventor - Extensions](https://mit-cml.github.io/extensions/)
@@ -83,3 +83,5 @@ Diese Funktion sendet einen Bytefolge mit einer Länge kleiner/gleich der einges
 * [Arduino Nano 33 BLE Produktbeschreibung](https://docs.arduino.cc/resources/datasheets/ABX00030-datasheet.pdf)
 * [Adafruit WS2811 Produktbeschreibung](https://cdn-shop.adafruit.com/datasheets/WS2811.pdf)
 * [Adafruit 4-channel I2C-safe Bi-directional Logic Level Converter - BSS138](https://www.adafruit.com/product/757)
+* [Indoor Northwall - Die Boulderwand
+zum selber bauen](https://i-nowa.com/)
