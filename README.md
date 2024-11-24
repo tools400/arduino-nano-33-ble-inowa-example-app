@@ -16,7 +16,7 @@ Für die Bluetooth Low Energy Unterstützung muss die [BluetoothLE](https://mit-
 
 #### Globale Variablen
 
-Die Werde für die *Service UUID* und die *Service Characteristics UUID* werden in den globalen Variablen `bleServiceUUID` und `bleServiceCharacteristicsUUID` gespeichert.
+Die Werte für die *Service UUID* und die *Service Characteristic UUID* werden in den globalen Variablen `bleServiceUUID` und `bleServiceCharacteristicsUUID` gespeichert.
 
 ![Globale_Variablen](./docs/Globale_Variablen.png "Globale_Variablen")
 
