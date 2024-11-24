@@ -10,9 +10,15 @@ Für den Betrieb der WS2811 LED Kette in Verbindung mit dem Arduino Nano 33 BLE 
 
 ### MIT App Inventor Erweiterungen
 
-Für die Bluetooth Low Energy Unterstützung muss die [BluetoothLE](https://mit-cml.github.io/extensions/data/extensions/edu.mit.appinventor.ble-20240822.aix) Erweiterung installiert werden. Für neue Versionen der Erweiterung bitte die Seite [MIT App Inventor Extensions](https://mit-cml.github.io/extensions/).
+Für die Bluetooth Low Energy Unterstützung muss die [BluetoothLE](https://mit-cml.github.io/extensions/data/extensions/edu.mit.appinventor.ble-20240822.aix) (v20240822) Erweiterung installiert werden. Auf der Seite [MIT App Inventor Extensions](https://mit-cml.github.io/extensions/) kann nachgeschaut werden, ob neuere Versionen zur Verfügung stehen.
 
 ### App Blocks
+
+#### Globale Variablen
+
+Die Werde für die *Service UUID* und die *Service Characteristics UUID* werden in den globalen Variablen `bleServiceUUID` und `bleServiceCharacteristicsUUID` gespeichert.
+
+![Globale_Variablen](./docs/Globale_Variablen.png "Globale_Variablen")
 
 #### LEDController_scanForDevice
 
