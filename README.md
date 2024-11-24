@@ -9,6 +9,9 @@ Für den Betrieb der WS2811 LED Kette in Verbindung mit dem Arduino Nano 33 BLE 
 ## Siehe auch
 
 * [MIT App Inventors](https://appinventor.mit.edu/)
+* [MIT App Inventor - Bluetooth Low Energy Extension](https://github.com/mit-cml/appinventor-extensions/tree/extension/bluetoothle)
+* [Download Bluetooth Low Energy Extension](https://mit-cml.github.io/extensions/data/extensions/edu.mit.appinventor.ble-20240822.aix)
+* [MIT App Inventor - Extensions](https://mit-cml.github.io/extensions/)
 * [Arduino Store](https://store.arduino.cc/en-de/products/arduino-nano-33-ble?srsltid=AfmBOoquMbIleJ2F_Nrln7l15mtdiEt-aQM-Gn_GX0p0JWSjtoa25Xyj)
 * [Arduino Nano 33 BLE Produktbeschreibung](https://docs.arduino.cc/resources/datasheets/ABX00030-datasheet.pdf)
 * [Adafruit WS2811 Produktbeschreibung](https://cdn-shop.adafruit.com/datasheets/WS2811.pdf)
