@@ -215,9 +215,6 @@ void setup() {
  */
 void loop() {
 
-  // poll for Bluetooth® Low Energy events
-  BLE.poll();
-
   // Signal "Power-On".
   digitalWrite(READY_LED, HIGH);
 
