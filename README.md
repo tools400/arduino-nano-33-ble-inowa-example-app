@@ -55,7 +55,7 @@ Diese Funktion konfiguriert das Bluetooth Gerät hinsichtlich der maximal zu üb
 
 ![LEDController_configure](./docs/LEDController_configure.png "LEDController_configure")
 
-Ein guter zeitpunkt für das Setzen der MTU findet sich im Ereignis `Connected`.
+Ein guter Zeitpunkt für das Setzen der MTU findet sich im Ereignis `Connected`.
 
 #### LEDController_disconnect
 
