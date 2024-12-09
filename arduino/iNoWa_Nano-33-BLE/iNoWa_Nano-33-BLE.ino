@@ -7,12 +7,16 @@
 //  by Constantin Hagen, 2021
 //  Open Source! GNU GPL v3.0
 //
+//  Example app commands:
+//    Boulder:             150:g/138:g/141:b/102:l/101:b/76:l/52:b/14:l/12:r/#
+//    Ambient-Light, on:   234/255/239/99!
+//    Ambient-Light, off:  0/0/0/99!
+//
 //  Version 1.1.6
 //  20.02.2022
 //
-//  Version 2.1.0-20241124-1639 by Thomas Raddatz
-//                                 (thomas.raddatz@tools400.de)
-//  24.11.2024
+//  Version 2.1.1  Thomas Raddatz (thomas.raddatz@tools400.de)
+//  09.12.2024
 //  Changed: Changed program to run on Arduino Nano 33 BLE
 //##################################################################
 //  App Command:
@@ -56,7 +60,6 @@
 //  1. What is the '.' used for in the incoming app command?
 //##################################################################
 
-// External libraries
 #include <Adafruit_NeoPixel.h>
 #include <ArduinoBLE.h>
 #include <EasyButton.h>
@@ -70,7 +73,7 @@ Random16 rnd16;
 #define LED_STRIPE_PIN      13    // Pin of 'WS2811' LED stripe.
 #define TEST_BUTTON_PIN     11    // Test Button.
 #define SPEAKER_PIN         12    // Loudspeaker (buzzer).
-#define NUM_LEDS           200    // Number of LEDs of the LED stripe.
+#define NUM_LEDS           154    // Number of LEDs of the LED stripe.
 #define REVERSE_ORDER        0    // Reverse order of LEDS. 1=reverse order, 0=default order
 
 Adafruit_NeoPixel leds(NUM_LEDS, LED_STRIPE_PIN, NEO_GRB + NEO_KHZ800);
@@ -83,14 +86,13 @@ Adafruit_NeoPixel leds(NUM_LEDS, LED_STRIPE_PIN, NEO_GRB + NEO_KHZ800);
 //   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
 //   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 
+// [Test] button handler
 EasyButton testButton(TEST_BUTTON_PIN, 50, true, true); // pullup & invert -> true; debounce: 50ms
 
 // Bluetooth Configuration
-#define MAX_SIZE_APP_CMD      128
-//BLEService ledService("19B10010-E8F2-537E-4F6C-D104768A1214"); // create service
-//BLEStringCharacteristic  ledCharacteristic("19B10011-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite, MAX_SIZE_APP_CMD);
+#define SIZE_CHARACTERISTIC_VALUE  64
 BLEService ledService("0000FFE0-0000-1000-8000-00805F9B34FB"); // create service
-BLEStringCharacteristic  ledCharacteristic("0000FFE1-0000-1000-8000-00805F9B34FB", BLERead | BLEWrite, MAX_SIZE_APP_CMD);
+BLEStringCharacteristic ledCharacteristic("0000FFE1-0000-1000-8000-00805F9B34FB", BLERead | BLEWrite, SIZE_CHARACTERISTIC_VALUE);
 
 // NeoPixel LED colors
 #define NP_OFF      leds.Color(0, 0, 0)
@@ -106,7 +108,7 @@ BLEStringCharacteristic  ledCharacteristic("0000FFE1-0000-1000-8000-00805F9B34FB
 #define HOLD_SEPARATOR        '/' // Character separator. The following byte is a number.
 #define PULSE_MARKER          'P' // Enabled fading if set to 'P'.
 #define SPARKLE_MARKER        'S' // Enabled glittering if set to 'S'.
-#define BRIGHTNESS_MARKER     '!' // Starts the brightness value.
+#define EOL_AMBIENT_LIGHT     '!' // End of transmission of Ambient Light.
 #define EOL_SNAKE_GAME        '*' // End of transmission of Snake game.
 #define EOL_BOULDER           '#' // End of transmission of boulder.
 #define RED                   "r" // Red
@@ -133,12 +135,13 @@ BLEStringCharacteristic  ledCharacteristic("0000FFE1-0000-1000-8000-00805F9B34FB
 #define E_ERROR_FLAG_LED      0   // Error indicator LED.
 #define E_ERROR_OFFS_LED      2   // Offset error indicator LEDs.
 #define E_TOO_MANY_MOVES      1   // Error: Too many moves.
+#define E_INVALID_MODE        2   // Error: Invalid configuration mode.
+#define E_COLOR_VALUE         3   // Error: Incomplete color value. R, B or G is missing.
 #define E_INTERVALL           500 // Error flag flashing interval in milliseconds.
 #define NP_E_ERROR      NP_RED    // Color of the error LED at position 0.
 #define NP_E_ERRNUM     NP_YELLOW // Color of the error number LED at position 2-n.
 
 // Application Status Variables.
-bool isEventLoopMessage = false;  // Ensures message is sent only once.
 bool glitterEnabled = false;      // Enable glitter effect.
 bool fadingEnabled = false;       // Enable fadingEnabled effect.
 int fadeDirection = -1;           // Fade down.
@@ -146,10 +149,11 @@ int brightness = BRIGHTNESS_MAX;  // Set max. brightness for fadingEnabled effec
 int testButton_counter = 0;       // Test button counter for switching mode.
 bool isErrorState = false;        // Error indicator. Stops processing commands.
 
+// Buffer for building the app command.
 typedef struct {
   char appCommand[SIZE_APP_COMMAND];
-  int appCmdLen;
-  int appCmdOffs;
+  boolean isAvalable;
+  int appCmdLen = 0;
 } Ble;
 
 Ble ble;
@@ -160,8 +164,10 @@ Ble ble;
 #define I_MAX_MOVES           25  // Maximum number of boulder moves.
 #define I_MAX_LED_PROPS       2   // Maximum number of LED configuration properties.
 
+// Current Boulder configuration settings.
 typedef struct {
-  String value = "";              // Incoming value of Android app command.
+  char mode = ' ';
+  boolean isApplied = false;
   int moveNum = 0;                // Number of boulder move of Android app command.
   String LEDConfig
           [I_MAX_MOVES]
@@ -173,19 +179,15 @@ typedef struct {
 
 Config currentConfig;
 
-// =================================================================
-//  Standard Arduino application methods.
-// =================================================================
-
 /**
- * Setup procedure. Executed once on application start.
+ * Setup the Arduino.
  */
 void setup() {
 
   // Enable debugging
   Serial.begin(9600); // Any baud rate should work
-  delay(500);
-  //while (!Serial); // Works only if USB cable is connected and Arduino IDE is started
+  delay(1800);        // It roughly takes 1700ms to initialize the serial interface
+  // while (!Serial); // Works only if USB cable is connected and Arduino IDE is started
 
   log("Starting setup...");
 
@@ -200,6 +202,9 @@ void setup() {
  
   // Test all lEDs at startup.
   startupLEDsTest();
+ 
+  // Reset current LED configuration
+  in_reset();
 
   // Play welcome melody.
   playWelcomeMelody();
@@ -211,123 +216,197 @@ void setup() {
 }
 
 /**
- * Main event loop.
+ * Main program loop
  */
 void loop() {
 
-  // Signal "Power-On".
-  digitalWrite(READY_LED, HIGH);
+  // Poll for Bluetooth® Low Energy events
+  BLE.poll();
 
-  if (!isEventLoopMessage) {
-    log("Starting event loop...");
-    isEventLoopMessage = true;
+  // Enable fading.
+  if (currentConfig.pulseMarker == PULSE_MARKER) {
+    log("Fading: enabled");
+    fadingEnabled = true;
+  } else {
+    // log("Fading: disabled");
+    // fadingEnabled = false;
   }
 
-  // Read the TEST button.
-  testButton.read();
-
-  // Receive data from Android app.
-  // Stop execution, if application is in error state.
-  receiveAppCommand();
-
-  // Optionally add some glitter effect.
-  if (glitterEnabled == true){
-    addGlitterEffect(30);
+  // Enable glitter.
+  if (currentConfig.sparkleMarker == SPARKLE_MARKER) {
+    log("Glitter: enabled");
+    glitterEnabled = true;
+  } else {
+    // log("Glitter: disabled");
+    // glitterEnabled = false;
   }
-
-  // fadingEnabled signal for ambience light.
-  if (fadingEnabled == true){
-    addFadingEffect();
-  }
-
 }
 
-// =================================================================
-//  Methods for handling Android app commands.
-// =================================================================
+/**
+ * Connected event handler that is exeuted, when
+ * the device gets connected to the app.
+ */
+void blePeripheralConnectHandler(BLEDevice central) {
+  log("Connected event, central: ");
+  Serial.println(central.address());
+}
 
 /**
- * Receives and processes a command send by the Android app.
+ * Disconnect event handler that is exeuted, when
+ * the device gets disconnected from the app.
  */
-void receiveAppCommand() {
+void blePeripheralDisconnectHandler(BLEDevice central) {
+  log("Disconnected event, central: ");
+  Serial.println(central.address());
+}
 
-  if (isErrorState) {
-    return;
+/**
+ * Characteristic event handler that is exeuted, when
+ * the characteristic value has been changed. The value
+ * is changed by the iNoWa app, when sending data to
+ * the device.
+ */
+void ledCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic) {
+
+  // iNoWa app wrote new value to characteristic, update command buffer
+  log("Receive data event.");
+
+  // Reset current config, if a new confugration must be started
+  if (currentConfig.isApplied) {
+    in_reset();
   }
 
-  // Try to read some data from the Bluetooth interface.
-  AppCommand_tryReceiveAppCommand();
+  // Append new value to app command
+  char value[SIZE_CHARACTERISTIC_VALUE];
+  int size = ledCharacteristic.readValue(value, sizeof(value));
 
-  if (AppCommand_available()) {
+  log("Bytes received: " + String(size));
 
-    delay(20); // just wait a little bit for more characters to arrive
+  int i = 0;
+  while (i < size && ble.appCmdLen < SIZE_APP_COMMAND)
+  {
+    ble.appCommand[ble.appCmdLen] = value[i];
+    ble.appCmdLen++;
+    if (value[i] == EOL_BOULDER || value[i] == EOL_AMBIENT_LIGHT || value[i] == EOL_SNAKE_GAME) {
+      ble.isAvalable = true;
+    }
+    i++;
+  }
 
-    // Reset input buffer.
-    in_reset();
+  // Apply app command, if fully received
+  if (ble.isAvalable) {
 
-    // Temporary buffer for building an input token.
-    String inToken = "";
+    parseAppCommand();
 
-    // Parse incomming app command:
-    while (AppCommand_available()) { // Bluetooth Low Energy
+    // Reset appCommand
+    log("Resetting app command...");
+    while (ble.appCmdLen > 0) {
+      ble.appCmdLen--;
+      ble.appCommand[ble.appCmdLen] = 0x00;
+    }
+    ble.isAvalable = false;
+    log("... finished resetting app command.");
+  }
+}
 
-      //TODO: receive data from serial or Bluetooth
+/**
+ * Parse and apply app command after it has been fully received.
+ */
+void parseAppCommand() {
 
-      char inByte = AppCommand_readNext();
+  logAppCommand("Parsing " + String(ble.appCmdLen) + " byte long app command: ");
 
-      // Consume data bytes for collecting inToken bytes. 
-      if (!isControlByte(inByte)) {
-        inToken.concat(inByte);
-      }
+  // Temporary buffer for building an input token.
+  String inToken = "";
 
-      // Store numeric LED number.
-      if (inByte == COLOR_SEPARATOR) {
-        currentConfig.LEDConfig[currentConfig.moveNum][I_LED] = inToken;
-        inToken = "";
-      }
+  char inByte;
+  int offset = 0;
+  while (offset < ble.appCmdLen) {
 
-      // Store alpha-numeric color indicator: 'r', 'g' or 'b'.
-      if (inByte == HOLD_SEPARATOR) {
-        currentConfig.LEDConfig[currentConfig.moveNum][I_COLOR] = inToken;
-        inToken = "";
-        currentConfig.moveNum++;
-        if (currentConfig.moveNum > I_MAX_MOVES) {
-          signalErrorState(E_TOO_MANY_MOVES);
-          return;
-        }
-      }
+    log("Current offset: " + String(offset) + " of " + String(ble.appCmdLen));
+    inByte = ble.appCommand[offset];
+    offset++;
 
-      // 'P': pulsate marker for ambience light mode (fading).
-      if (inByte == PULSE_MARKER) {
-        currentConfig.pulseMarker = inByte;
-        inToken = "";
-      }
+    // Consume data bytes for collecting inToken bytes. 
+    if (!isControlByte(inByte)) {
+      inToken.concat(inByte);
+    }
 
-      // 'S': sparkle marker for glitter mode.
-      if (inByte == SPARKLE_MARKER) {
-        currentConfig.sparkleMarker = inByte; // 'S'
-        inToken = "";
-      }
+    // Store numeric LED number.
+    if (inByte == COLOR_SEPARATOR) {
+      currentConfig.LEDConfig[currentConfig.moveNum][I_LED] = inToken;
+      inToken = "";
+    }
 
-      // Store brightness value.
-      if (inByte == BRIGHTNESS_MARKER) {
-        currentConfig.brightness = inToken.toInt();
-        inToken = "";
-      }
-
-      // End of App command.
-      if (isEOL(inByte)) {
-
-        configureLEDs();
-
-        if (inByte == EOL_BOULDER) {
-          playBoulderMelody();
-        } else {
-          playSnakeMelody();
-        }
+    // Store alpha-numeric color indicator: 'r', 'g' or 'b'.
+    if (inByte == HOLD_SEPARATOR) {
+      currentConfig.LEDConfig[currentConfig.moveNum][I_COLOR] = inToken;
+      inToken = "";
+      currentConfig.moveNum++;
+      if (currentConfig.moveNum > I_MAX_MOVES) {
+        signalErrorState(E_TOO_MANY_MOVES);
+        return;
       }
     }
+
+    // 'P': pulsate marker for ambience light mode (fading).
+    if (inByte == PULSE_MARKER) {
+      currentConfig.pulseMarker = inByte;
+      inToken = "";
+    }
+
+    // 'S': sparkle marker for glitter mode.
+    if (inByte == SPARKLE_MARKER) {
+      currentConfig.sparkleMarker = inByte; // 'S'
+      inToken = "";
+    }
+
+    // Store brightness value of ambient light.
+    if (inByte == EOL_AMBIENT_LIGHT) {
+      currentConfig.brightness = inToken.toInt();
+      inToken = "";
+    }
   }
+
+  // Store mode. Mode is indicated by the last received byte.
+  if (inByte == EOL_BOULDER || inByte == EOL_AMBIENT_LIGHT || inByte == EOL_SNAKE_GAME) {
+    currentConfig.mode = inByte;
+
+    configureLEDs();
+
+    if (inByte == EOL_BOULDER) {
+      playBoulderMelody();
+    } else if (inByte == EOL_SNAKE_GAME) {
+      playSnakeMelody();
+    } else {
+      // no sound for ambient light
+    }
+
+  } else {
+    signalErrorState(E_INVALID_MODE);
+  }
+
+  log("** Finished parsing app command **");
+}
+
+/**
+ * Tests an incoming byte.
+ * Returns 'true', if the incoming byte is a control byte, else 'false'.
+ */
+bool isControlByte(char anInByte) {
+
+  if (anInByte == EOL_BOULDER
+      || anInByte == EOL_SNAKE_GAME
+      || anInByte == HOLD_SEPARATOR
+      || anInByte == COLOR_SEPARATOR
+      || anInByte == EOL_AMBIENT_LIGHT
+      || anInByte == SPARKLE_MARKER
+      || anInByte == PULSE_MARKER
+      || anInByte == '.') {  //TODO: Dot is actually not used. Indented usage: unknown
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -338,52 +417,54 @@ void configureLEDs() {
   // Set LED colors
   log("Configuring " + String(currentConfig.moveNum) + " LEDs...");
 
-  // Turn off all LEDs.
-  leds_off();
-
   // Set brightness.
   brightness = currentConfig.brightness;
   leds_brightness(brightness);
 
-  // Configure LED byLED...
-  for (int m = 0; m < currentConfig.moveNum; m++) {
-    int led = currentConfig.LEDConfig[m][I_LED].toInt() - 1;
-    String color = currentConfig.LEDConfig[m][I_COLOR];
-    if (color == RED) {
-      log("Boulder: Set color of target handle (red).");
-      leds_setPixelColor(led, NP_RED);    // target handle
-    } else if (color == GREEN) {
-      log("Boulder: Set color of starting handle (green).");
-      leds_setPixelColor(led, NP_GREEN);  // starting handle
-    } else if (color == BLUE) {
-      log("Boulder: Set color of intermediate handle (blue).");
-      leds_setPixelColor(led, NP_BLUE);   // intermediate handle
-    } else if (color == PURPLE) {
-      log("Boulder: Set color of intermediate handle (purple).");
-      leds_setPixelColor(led, NP_PURPLE); // intermediate handle
+  // Configure boulder LED by LED...
+  if (currentConfig.mode == EOL_BOULDER) {
+    leds_off();
+    for (int m = 0; m < currentConfig.moveNum; m++) {
+      int led = currentConfig.LEDConfig[m][I_LED].toInt() - 1;
+      String color = currentConfig.LEDConfig[m][I_COLOR];
+      if (color == RED) {
+        log("Boulder: Set color of target handle (red).");
+        leds_setPixelColor(led, NP_RED);    // target handle
+      } else if (color == GREEN) {
+        log("Boulder: Set color of starting handle (green).");
+        leds_setPixelColor(led, NP_GREEN);  // starting handle
+      } else if (color == BLUE) {
+        log("Boulder: Set color of intermediate handle (blue).");
+        leds_setPixelColor(led, NP_BLUE);   // intermediate handle
+      } else if (color == PURPLE) {
+        log("Boulder: Set color of intermediate handle (purple).");
+        leds_setPixelColor(led, NP_PURPLE); // intermediate handle
+      }
     }
-  }
-
-  // Enable fading.
-  if (currentConfig.pulseMarker == PULSE_MARKER) {
-    log("Fading: enabled");
-    fadingEnabled = true;
-  } else {
-    log("Fading: disabled");
-    fadingEnabled = false;
-  }
-
-  // Enable glitter.
-  if (currentConfig.sparkleMarker == SPARKLE_MARKER) {
-    log("Glitter: enabled");
-    glitterEnabled = true;
-  } else {
-    log("Glitter: disabled");
-    glitterEnabled = false;
+  } else if (currentConfig.mode == EOL_AMBIENT_LIGHT) {
+    // Configure ambient-light...
+    if (currentConfig.moveNum == 3) {
+      int green = currentConfig.LEDConfig[0][I_COLOR].toInt();
+      int red = currentConfig.LEDConfig[1][I_COLOR].toInt();
+      int blue = currentConfig.LEDConfig[2][I_COLOR].toInt();
+      uint32_t color = leds.Color(red, green, blue);
+      if (color == 0) {
+        leds_off();
+      } else {
+        for (int led = 0; led < NUM_LEDS; led++) {
+          leds_setPixelColor(led, color);
+        }
+      }
+    } else {
+      // Error: Incomplete color value
+      signalErrorState(E_COLOR_VALUE);
+    }
   }
 
   // Turn LEDs on, displaying boulder moves or snake game.
   leds_show();
+
+  currentConfig.isApplied = true;
 }
 
 /**
@@ -414,55 +495,6 @@ void addFadingEffect() {
     fadeDirection = fadeDirection * -1;
   }
   delay(FADE_SPEED);
-}
-
-/**
- * Tests an incoming byte.
- * Returns 'true', if the incoming byte is a control byte, else 'false'.
- */
-bool isControlByte(char anInByte) {
-
-  if (isEOL(anInByte)
-      || anInByte == HOLD_SEPARATOR
-      || anInByte == COLOR_SEPARATOR
-      || anInByte == BRIGHTNESS_MARKER
-      || anInByte == SPARKLE_MARKER
-      || anInByte == PULSE_MARKER
-      || anInByte == '.') {  //TODO: Dot is actually not used. Indented usage: unknown
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Tests an incoming byte.
- * Returns 'true', if the incoming byte indicates the end of the line (command).
- */
-bool isEOL(char anInByte) {
-
-  if (anInByte == EOL_BOULDER || anInByte == EOL_SNAKE_GAME) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Resets the variables for reading data from the Bluetooth interface.
- */
-void in_reset() {
-
-  currentConfig.moveNum = 0;
-  currentConfig.pulseMarker = ' ';
-  currentConfig.sparkleMarker = ' ';
-  currentConfig.brightness = BRIGHTNESS_BOULDER;
-
-  for (int m=0; m < I_MAX_MOVES; m++) {
-    for (int p=0; m < I_MAX_LED_PROPS; m++) {
-      currentConfig.LEDConfig[m][p] = "";
-    }
-  }
 }
 
 // =================================================================
@@ -672,6 +704,27 @@ void displayErrorNumber(int anErrorNumber) {
   }
 }
 
+/**
+ * Resets the variables for reading data from the Bluetooth interface.
+ */
+void in_reset() {
+
+  log("Resetting current LED configuration.");
+
+  currentConfig.mode = ' ';
+  currentConfig.isApplied = false;
+  currentConfig.moveNum = 0;
+  currentConfig.pulseMarker = ' ';
+  currentConfig.sparkleMarker = ' ';
+  currentConfig.brightness = BRIGHTNESS_BOULDER;
+
+  for (int m=0; m < I_MAX_MOVES; m++) {
+    for (int p=0; m < I_MAX_LED_PROPS; m++) {
+      currentConfig.LEDConfig[m][p] = "";
+    }
+  }
+}
+
 // =================================================================
 //  Methods for encapsulating the NeoPixel library procedure calls.
 // =================================================================
@@ -762,32 +815,6 @@ void leds_show() {
 // Initializes the Bluetooth library.
 // Called once, when the application starts.
 void Bluetooth_initialize() {
-  BluetoothLE_initialize();
-}
-
-// Receives a command from the Android app.
-void AppCommand_tryReceiveAppCommand() {
-  BluetoothLE_tryReceiveAppCommand();
-}
-
-// Tests whether new input data is available.
-bool AppCommand_available() {
-  // return BluetoothLE_available();
-  return ble.appCmdOffs < ble.appCmdLen;
-}
-
-// Returns the next by of the current app command.
-char AppCommand_readNext() {
-  return BluetoothLE_read();
-}
-
-// =================================================================
-//  Methods building a fassade for the BluetoothLE library.
-// Replace this methods if you need to use another library and
-// update the methods of the app fassade.
-// =================================================================
-
-void BluetoothLE_initialize() {
 
   if (!BLE.begin()) {
     log("Starting Bluetooth® Low Energy module failed!");
@@ -795,7 +822,8 @@ void BluetoothLE_initialize() {
   }
 
   // Set Bluetooth application name.
-  BLE.setLocalName("i-NoWa Indoor North Wall");
+  // BLE.setLocalName("i-NoWa Indoor North Wall");
+  BLE.setLocalName("iNoWa");
 
   // Set the UUID for the service this peripheral advertises:
   BLE.setAdvertisedService(ledService);
@@ -806,45 +834,20 @@ void BluetoothLE_initialize() {
   // Add the service
   BLE.addService(ledService);
 
+  // Assign event handlers for connected, disconnected to peripheral
+  BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
+  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
+
+  // Assign event handlers for characteristic
+  ledCharacteristic.setEventHandler(BLEWritten, ledCharacteristicWritten);
+
+  // Set an initial value for the characteristic
+  ledCharacteristic.setValue("");
+
   // Start advertising
   BLE.advertise();
 
   log("Bluetooth® device active, waiting for connections...");
-}
-
-void BluetoothLE_tryReceiveAppCommand() {
-  if (BLE.connected()) {
-    if (ledCharacteristic.valueLength() > 0) {
-      ble.appCmdLen = ledCharacteristic.readValue(ble.appCommand, SIZE_APP_COMMAND);
-      ble.appCmdOffs = 0;
-      ledCharacteristic.writeValue("");
-      log("Received app command: " + String(ble.appCommand) + " (" + ble.appCmdLen + " bytes)");
-    }
-  } else {
-    ble.appCmdLen = 0;
-    ble.appCmdOffs = 0;
-  }
-}
-
-bool BluetoothLE_available() {
-  if (ble.appCmdOffs < ble.appCmdLen) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-char BluetoothLE_read() {
-  char tChar = ' ';
-  if (ble.appCmdOffs < SIZE_APP_COMMAND) {
-    log("Current offset: " + String(ble.appCmdOffs));
-    tChar = ble.appCommand[ble.appCmdOffs];
-    ble.appCmdOffs = ble.appCmdOffs + 1;
-  }
-  if (ble.appCmdOffs >= ble.appCmdLen) {
-    log("** No more input data available **");
-  }
-  return tChar;
 }
 
 // =================================================================
@@ -857,4 +860,12 @@ void log(String aMessage) {
 
 void log(char aChar) {
   Serial.println(aChar);
+}
+
+void logAppCommand(String aMessage) {
+  String message = aMessage;
+  for (int i = 0; i < ble.appCmdLen; i++) {
+    message += String(ble.appCommand[i]);
+  }
+  log(message);
 }
