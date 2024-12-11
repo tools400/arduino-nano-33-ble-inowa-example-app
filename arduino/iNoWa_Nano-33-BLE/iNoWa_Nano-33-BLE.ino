@@ -220,6 +220,12 @@ void setup() {
  */
 void loop() {
 
+  // Signal "Power-On".
+  digitalWrite(READY_LED, HIGH);
+
+  // Read the TEST button.
+  testButton.read();
+
   // Poll for Bluetooth® Low Energy events
   BLE.poll();
 
@@ -417,6 +423,11 @@ void configureLEDs() {
   // Set LED colors
   log("Configuring " + String(currentConfig.moveNum) + " LEDs...");
 
+  // Switch all LEDs off, if no configuration is available.
+  if (currentConfig.moveNum == 0) {
+    leds_off();
+  }
+
   // Set brightness.
   brightness = currentConfig.brightness;
   leds_brightness(brightness);
@@ -513,9 +524,7 @@ void testButton_pressed() {
     log("Switching all LEDs off...");
     testButton_counter = 0;
     leds_off();
-    signalMode();
-    delay(100);
-    signalMode();
+    playWelcomeMelody();
   }
   else if (testButton_counter == 1) {
     log("Switching all LEDs to RED...");
@@ -815,6 +824,8 @@ void leds_show() {
 // Initializes the Bluetooth library.
 // Called once, when the application starts.
 void Bluetooth_initialize() {
+
+  log("Starting Bluetooth® Low Energy module...");
 
   if (!BLE.begin()) {
     log("Starting Bluetooth® Low Energy module failed!");
