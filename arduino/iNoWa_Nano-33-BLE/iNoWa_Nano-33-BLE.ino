@@ -93,8 +93,7 @@ EasyButton testButton(TEST_BUTTON_PIN, 50, true, true); // pullup & invert -> tr
 #define SIZE_CHARACTERISTIC_VALUE  64
 BLEService ledService("0000FFE0-0000-1000-8000-00805F9B34FB"); // create service
 BLEStringCharacteristic ledCharacteristic("0000FFE1-0000-1000-8000-00805F9B34FB", BLERead | BLEWrite, SIZE_CHARACTERISTIC_VALUE);
-// Funktioniert nicht mit der 'nRF Connect' App
-// BLEDescriptor ledCharacteristicDescriptor("0193EECD-9EAE-7E4D-9113-59947C514B5A", "LED Value");
+BLEDescriptor ledCharacteristicDescriptor("0193EECD-9EAE-7E4D-9113-59947C514B5A", "LED Value");
 
 
 // NeoPixel LED colors
@@ -843,7 +842,7 @@ void Bluetooth_initialize() {
   BLE.setAdvertisedService(ledService);
 
   // Add the characteristics to the service
-  // ledCharacteristic.addDescriptor(ledCharacteristicDescriptor);
+  ledCharacteristic.addDescriptor(ledCharacteristicDescriptor);
   ledService.addCharacteristic(ledCharacteristic);
 
   // Add the service
